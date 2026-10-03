@@ -1,0 +1,74 @@
+{
+  "name": "@flexai/ai-sdk-provider",
+  "version": "0.1.0",
+  "description": "Vercel AI SDK provider for FlexAI \u2014 open-weight models served behind an OpenAI-compatible API",
+  "license": "MIT",
+  "author": "FlexAI <sundar.bala@flex.ai>",
+  "homepage": "https://flex.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flexaihq/ai-sdk-flexai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/flexaihq/ai-sdk-flexai/issues"
+  },
+  "keywords": [
+    "ai",
+    "ai-sdk",
+    "vercel-ai-sdk",
+    "flexai",
+    "llm",
+    "inference",
+    "openai-compatible"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src",
+    "test:unit": "vitest run src",
+    "test:integration": "vitest run tests",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.62",
+    "@ai-sdk/provider": "^4.0.21",
+    "@ai-sdk/provider-utils": "^5.0.53"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.76 || ^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ai": "^7.0.127",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "zod": "^4.6.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
