@@ -142,13 +142,21 @@ package's defaults are wrong for FlexAI, and both are changed here:
 | Setting | Upstream default | Here | Why |
 |---|---|---|---|
 | `includeUsage` | `undefined` (off) | `true` | FlexAI reports usage on a stream only when `stream_options.include_usage` is sent. Left off, `totalUsage` resolves to all-`undefined` token counts on **every** streamed response — no error, just silently absent cost tracking. |
-| `supportsStructuredOutputs` | `false` | `true` | FlexAI enforces strict `json_schema` on most served models. Left off, `generateObject` falls back to prompt-guided JSON mode and never uses the constrained path. |
+| `supportsStructuredOutputs` | `false` | `true` | FlexAI enforces strict `json_schema` on a good share of served models. Left off, `generateObject` never uses the constrained path and falls back to prompt-guided JSON. |
 
 Both are overridable:
 
 ```ts
 createFlexAI({ includeUsage: false, supportsStructuredOutputs: false });
 ```
+
+A caveat on the second one, because the obvious assumption is wrong. Turning
+`supportsStructuredOutputs` **off** is not a general rescue for a model that
+rejects `json_schema`. Measured across the six models that failed
+`generateObject` with the default on, opting out rescued exactly **one**
+(`Qwen3.6-27B-FP8`); the other five still failed, just with a vaguer
+`AI_NoObjectGeneratedError` instead of a 400 naming the unsupported parameter.
+Leaving the default on is what gives you the actionable error.
 
 ## Token usage
 
@@ -173,14 +181,36 @@ rather than provider-wide. Every row below was measured against the live API on
 |---|---|
 | **Streaming usage** | Absent unless `stream_options.include_usage` is sent. This package sends it by default. |
 | **Forced tool choice** | Per-model, and best-effort rather than constrained decoding. `DeepSeek-V4-Flash-0731` and `gpt-oss-120b` honour `toolChoice: 'required'` on a prompt that invites no tool call; `gemma-4-31b-it` declines and the gateway returns `400` rather than inventing a call. |
-| **Structured output** | Strict `json_schema` is enforced on a subset. A model that does not support it (e.g. `Muse-Glimmer-30B`) **rejects** the request with a 400 naming `response_format`, rather than silently ignoring it. |
-| **Image input** | Vision models only. Most non-vision models reject with `400 … is not a multimodal model`. `gpt-oss-120b` is the exception: it **accepts** an image part and ignores it, answering "I'm unable to view the image" — so a 200 is not proof the image was read. |
+| **Structured output** | Strict `json_schema` is enforced on a subset — 5 of the 11 chat models we measured. A model that does not support it **rejects** the request with a 400 naming `response_format`, rather than silently ignoring it. |
+| **`supported_parameters` is not a reliable predictor** | FlexAI's own 400 says to use "a model that advertises `structured_outputs` in its `/v1/models` `supported_parameters`" — but **no model currently advertises that value**, and several that list `response_format` still reject `json_schema` (`Qwen3.6-27B-FP8`, `Step-3.7-Flash`, `GLM-5.3-Flash`, `DeepSeek-V4.1-Flash`). Measure, do not infer. |
+| **Image input** | Vision models only. Most non-vision models reject with `400 … is not a multimodal model`. `gpt-oss-120b` and `gpt-oss-20b` are the exceptions: they **accept** an image part and ignore it (120b answers "I'm unable to view the image"; 20b returns empty content) — so a 200 is not proof the image was read. |
+| **The catalog can understate a model** | `DeepSeek-V4.1-Flash` reports `input_modalities: ["text"]` and `category: "text"` in `GET /v1/models`, but reads images correctly on both fixtures. |
 | **Reasoning traces** | Returned in `reasoning_content` by `gpt-oss-120b`; mapped to SDK reasoning parts by the base package. `DeepSeek-V4-Flash-0731` reasons inline in `content` instead. |
 | **`max_output_length`** | Mirrors `context_length` on every chat row in `GET /v1/models`. It is not a real output cap — do not treat it as one. |
 | **Low `maxOutputTokens` on a reasoning model** | Returns empty content with `finish_reason: "stop"`, because the budget went to hidden reasoning. Two vision models (`Step-3.7-Flash`, `GLM-5.3-Flash`) looked blind at 24 tokens and read both fixtures correctly at 1024. Budget generously before concluding a model cannot do something. |
 
-Check a model's `supported_parameters` in `GET /v1/models` before relying on
-any of these.
+### Measured capability matrix
+
+Probed through this package against the live API on 2026-10-02. Image input
+was verified with **two** different solid-colour fixtures, so a model that
+always guesses the same colour cannot pass.
+
+| Model | Image Input | Object Generation | Tool Usage | Tool Streaming |
+| --- | --- | --- | --- | --- |
+| `DeepSeek-V4-Flash-0731` | no | yes | yes | yes |
+| `DeepSeek-V4.1-Flash` | yes | no | yes | yes |
+| `GLM-5.2` | no | no | yes | yes |
+| `gpt-oss-120b` | no | yes | yes | yes |
+| `gpt-oss-20b` | no | no | yes | yes |
+| `Llama-3.3-70B-Instruct-FP8` | no | yes | yes | yes |
+| `Qwen3-Coder-30B-A3B-Instruct-FP8` | no | yes | yes | yes |
+| `gemma-4-31b-it` | yes | yes | yes | yes |
+| `Qwen3.6-27B-FP8` | yes | no | yes | yes |
+| `Step-3.7-Flash` | yes | no | yes | yes |
+| `GLM-5.3-Flash` | yes | no | yes | yes |
+
+The model list changes; re-measure rather than trusting this table
+indefinitely.
 
 ## Configuration
 
