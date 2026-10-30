@@ -142,7 +142,7 @@ package's defaults are wrong for FlexAI, and both are changed here:
 | Setting | Upstream default | Here | Why |
 |---|---|---|---|
 | `includeUsage` | `undefined` (off) | `true` | FlexAI reports usage on a stream only when `stream_options.include_usage` is sent. Left off, `totalUsage` resolves to all-`undefined` token counts on **every** streamed response — no error, just silently absent cost tracking. |
-| `supportsStructuredOutputs` | `false` | `true` | FlexAI enforces strict `json_schema` on a good share of served models. Left off, `generateObject` never uses the constrained path and falls back to prompt-guided JSON. |
+| `supportsStructuredOutputs` | `false` | `true` | FlexAI enforces strict `json_schema` on every chat model in the matrix below (re-measured 2026-10-29). Left off, `generateObject` never uses the constrained path and falls back to prompt-guided JSON. |
 
 Both are overridable:
 
@@ -150,13 +150,12 @@ Both are overridable:
 createFlexAI({ includeUsage: false, supportsStructuredOutputs: false });
 ```
 
-A caveat on the second one, because the obvious assumption is wrong. Turning
-`supportsStructuredOutputs` **off** is not a general rescue for a model that
-rejects `json_schema`. Measured across the six models that failed
-`generateObject` with the default on, opting out rescued exactly **one**
-(`Qwen3.6-27B-FP8`); the other five still failed, just with a vaguer
-`AI_NoObjectGeneratedError` instead of a 400 naming the unsupported parameter.
-Leaving the default on is what gives you the actionable error.
+A caveat on the second one. If a model rejects `json_schema`, it returns a 400
+naming `response_format`. Turning `supportsStructuredOutputs` **off** is not a
+general rescue: on 2026-10-02, when six models still rejected it, opting out
+rescued exactly **one** and the rest failed with a vaguer
+`AI_NoObjectGeneratedError`. Leaving the default on is what gives you the
+actionable error.
 
 ## Token usage
 
@@ -181,33 +180,34 @@ rather than provider-wide. Every row below was measured against the live API on
 |---|---|
 | **Streaming usage** | Absent unless `stream_options.include_usage` is sent. This package sends it by default. |
 | **Forced tool choice** | Per-model, and best-effort rather than constrained decoding. `DeepSeek-V4-Flash-0731` and `gpt-oss-120b` honour `toolChoice: 'required'` on a prompt that invites no tool call; `gemma-4-31b-it` declines and the gateway returns `400` rather than inventing a call. |
-| **Structured output** | Strict `json_schema` is enforced on a subset — 5 of the 11 chat models we measured. A model that does not support it **rejects** the request with a 400 naming `response_format`, rather than silently ignoring it. |
-| **`supported_parameters` is not a reliable predictor** | FlexAI's own 400 says to use "a model that advertises `structured_outputs` in its `/v1/models` `supported_parameters`" — but **no model currently advertises that value**, and several that list `response_format` still reject `json_schema` (`Qwen3.6-27B-FP8`, `Step-3.7-Flash`, `GLM-5.3-Flash`, `DeepSeek-V4.1-Flash`). Measure, do not infer. |
+| **Structured output** | Strict `json_schema` is accepted and enforced on all 11 chat models in the matrix (re-measured 2026-10-29; on 2026-10-02 only 5 of 11 accepted it). A model that does not support it **rejects** the request with a 400 naming `response_format`, rather than silently ignoring it. |
+| **Capability flags in `/v1/models`** | Each model now lists its capabilities in `supports` (for example `structured_outputs`, `tool_use`, `vision`, `reasoning`). On 2026-10-02 the flags and the live behaviour disagreed for several models, so this package's matrix is measured rather than read from the catalog. |
 | **Image input** | Vision models only. Most non-vision models reject with `400 … is not a multimodal model`. `gpt-oss-120b` and `gpt-oss-20b` are the exceptions: they **accept** an image part and ignore it (120b answers "I'm unable to view the image"; 20b returns empty content) — so a 200 is not proof the image was read. |
-| **The catalog can understate a model** | `DeepSeek-V4.1-Flash` reports `input_modalities: ["text"]` and `category: "text"` in `GET /v1/models`, but reads images correctly on both fixtures. |
-| **Reasoning traces** | Returned in `reasoning_content` by `gpt-oss-120b`; mapped to SDK reasoning parts by the base package. `DeepSeek-V4-Flash-0731` reasons inline in `content` instead. |
+| **Reasoning traces** | Returned in `reasoning_content` and mapped to SDK reasoning parts by the base package. On the DeepSeek V4 models thinking is off unless requested (`thinking: { type: 'enabled' }` or a `reasoning_effort`); `GLM-5.3-Flash` always reasons. |
 | **`max_output_length`** | Mirrors `context_length` on every chat row in `GET /v1/models`. It is not a real output cap — do not treat it as one. |
 | **Low `maxOutputTokens` on a reasoning model** | Returns empty content with `finish_reason: "stop"`, because the budget went to hidden reasoning. Two vision models (`Step-3.7-Flash`, `GLM-5.3-Flash`) looked blind at 24 tokens and read both fixtures correctly at 1024. Budget generously before concluding a model cannot do something. |
 
 ### Measured capability matrix
 
-Probed through this package against the live API on 2026-10-02. Image input
-was verified with **two** different solid-colour fixtures, so a model that
-always guesses the same colour cannot pass.
+Probed through this package against the live API on 2026-10-02; Object
+Generation was re-measured on 2026-10-29 with a strict `json_schema` request
+(3 runs per model), and `DeepSeek-V4.1-Flash-1017` was added on that date.
+Image input was verified with **two** different solid-colour fixtures, so a
+model that always guesses the same colour cannot pass.
 
 | Model | Image Input | Object Generation | Tool Usage | Tool Streaming |
 | --- | --- | --- | --- | --- |
 | `DeepSeek-V4-Flash-0731` | no | yes | yes | yes |
-| `DeepSeek-V4.1-Flash` | yes | no | yes | yes |
-| `GLM-5.2` | no | no | yes | yes |
+| `DeepSeek-V4.1-Flash-1017` | yes | yes | yes | yes |
+| `GLM-5.2` | no | yes | yes | yes |
 | `gpt-oss-120b` | no | yes | yes | yes |
-| `gpt-oss-20b` | no | no | yes | yes |
+| `gpt-oss-20b` | no | yes | yes | yes |
 | `Llama-3.3-70B-Instruct-FP8` | no | yes | yes | yes |
 | `Qwen3-Coder-30B-A3B-Instruct-FP8` | no | yes | yes | yes |
 | `gemma-4-31b-it` | yes | yes | yes | yes |
-| `Qwen3.6-27B-FP8` | yes | no | yes | yes |
-| `Step-3.7-Flash` | yes | no | yes | yes |
-| `GLM-5.3-Flash` | yes | no | yes | yes |
+| `Qwen3.6-27B-FP8` | yes | yes | yes | yes |
+| `Step-3.7-Flash` | yes | yes | yes | yes |
+| `GLM-5.3-Flash` | yes | yes | yes | yes |
 
 The model list changes; re-measure rather than trusting this table
 indefinitely.

@@ -35,7 +35,7 @@ export const FLEXAI_DEFAULT_BASE_URL = 'https://api.flex.ai/v1';
  */
 export type FlexAIChatModelId =
   | 'DeepSeek-V4-Flash-0731'
-  | 'DeepSeek-V4.1-Flash'
+  | 'DeepSeek-V4.1-Flash-1017'
   | 'GLM-5.2'
   | 'GLM-5.3-Flash'
   | 'gpt-oss-120b'

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- README: strict `json_schema` is now accepted on every chat model in the
+  capability matrix (re-measured 2026-10-29); the matrix replaces the delisted
+  `DeepSeek-V4.1-Flash` with `DeepSeek-V4.1-Flash-1017`.
+- `FlexAIChatModelId` suggests `DeepSeek-V4.1-Flash-1017` instead of the
+  delisted `DeepSeek-V4.1-Flash`.
+
 ## 0.1.0
 
 Initial release.
